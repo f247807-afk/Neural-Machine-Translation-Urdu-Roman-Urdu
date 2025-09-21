@@ -4,6 +4,7 @@
 # =============================================================================
 import zipfile
 import os
+import requests
 
 from io import BytesIO
 
