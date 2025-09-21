@@ -5,8 +5,8 @@
 import zipfile
 import os
 
-zip_file_path = '/content/dataset.zip'
-extract_dir = '/content/'
+zip_file_path = '/dataset.zip'
+extract_dir = '/'
 
 with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
     zip_ref.extractall(extract_dir)
