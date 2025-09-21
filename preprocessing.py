@@ -1,5 +1,7 @@
 
-
+# =============================================================================
+# DATA EXTRACTION MODULE
+# =============================================================================
 import zipfile
 import os
 
@@ -10,6 +12,10 @@ with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
     zip_ref.extractall(extract_dir)
 
 print(f"Extracted {zip_file_path} to {extract_dir}")
+
+# =============================================================================
+# IMPORTS AND CONFIGURATION
+# =============================================================================
  # Full cleaned pipeline: char-level transliteration (Urdu -> Roman)
 import os, re, zipfile, glob, math, random
 from collections import Counter
@@ -41,7 +47,9 @@ DATA_DIR = "/content/dataset"  # adjust if needed
   # -------------------------
   # Utilities (dataset load + normalization)
   # -------------------------
-
+# =============================================================================
+# PREPROCESSING MODULE (DATA LOADING AND CLEANING)
+# =============================================================================
 def load_dataset(data_dir: str) -> pd.DataFrame:
       pairs = []
       for poet in os.listdir(data_dir):
@@ -102,6 +110,9 @@ def prepare_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+# =============================================================================
+# VOCABULARY AND TOKENIZATION MODULE
+# =============================================================================
 # -------------------------
 # Tokens / char vocab
 # -------------------------
@@ -142,6 +153,9 @@ def encode_sequence(seq: str, stoi: Dict[str,int], add_sos: bool=False, add_eos:
 
 
 
+# =============================================================================
+# DATASET AND DATA LOADER MODULE
+# =============================================================================    
 # -------------------------
 # Dataset + collate
 # -------------------------
@@ -220,6 +234,9 @@ def build_dataloaders_char(df, src_stoi, trg_stoi, cfg, batch_size=32):
 
 
 
+# =============================================================================
+# MODEL ARCHITECTURE MODULES
+# =============================================================================
 # ------------------------------
 # Encoder: BiLSTM
 # ------------------------------
@@ -249,7 +266,7 @@ class EncoderBiLSTM(nn.Module):
             outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=True)
         else:
             outputs, (hidden, cell) = self.rnn(embedded)
-        return outputs, (hidden, cell)  # hidden: [2*layers, B, H_enc]
+        return outputs, (hidden, cell)  
 
 
 
@@ -264,11 +281,10 @@ class Attention(nn.Module):
         self.v = nn.Linear(dec_hidden_dim, 1, bias=False)
 
     def forward(self, hidden, encoder_outputs):
-        # hidden: [B, H_dec], encoder_outputs: [B, T, 2*H_enc]
         src_len = encoder_outputs.shape[1]
-        hidden = hidden.unsqueeze(1).repeat(1, src_len, 1)  # [B, T, H_dec]
+        hidden = hidden.unsqueeze(1).repeat(1, src_len, 1) 
         energy = torch.tanh(self.attn(torch.cat((hidden, encoder_outputs), dim=2)))
-        attention = self.v(energy).squeeze(2)  # [B, T]
+        attention = self.v(energy).squeeze(2)  
         return F.softmax(attention, dim=1)
 
 # ------------------------------
@@ -293,23 +309,21 @@ class DecoderLSTM(nn.Module):
         self.hidden_proj = nn.Linear(enc_hidden_dim * 2, self.rnn.hidden_size)
         self.cell_proj = nn.Linear(enc_hidden_dim * 2, self.rnn.hidden_size)
     def init_hidden(self, enc_hidden, enc_cell):
-        # Combine BiLSTM hidden states if needed (forward + backward)
         hidden_cat = torch.cat((enc_hidden[-2], enc_hidden[-1]), dim=1)
         cell_cat = torch.cat((enc_cell[-2], enc_cell[-1]), dim=1)
 
-        # Project to decoder hidden size
         hidden = torch.tanh(self.hidden_proj(hidden_cat)).unsqueeze(0)
         cell = torch.tanh(self.cell_proj(cell_cat)).unsqueeze(0)
         return hidden, cell
 
     def forward(self, input, hidden, cell, encoder_outputs):
-        # input: [B]
+      
         input = input.unsqueeze(1)
-        embedded = self.dropout(self.embedding(input))  # [B,1,emb_dim]
+        embedded = self.dropout(self.embedding(input))  
 
-        a = self.attention(hidden[-1], encoder_outputs)  # [B,T]
-        a = a.unsqueeze(1)  # [B,1,T]
-        weighted = torch.bmm(a, encoder_outputs)  # [B,1,2*H_enc]
+        a = self.attention(hidden[-1], encoder_outputs) 
+        a = a.unsqueeze(1)  
+        weighted = torch.bmm(a, encoder_outputs)  
 
         rnn_input = torch.cat((embedded, weighted), dim=2)
         output, (hidden, cell) = self.rnn(rnn_input, (hidden, cell))
@@ -328,7 +342,6 @@ class Seq2Seq(nn.Module):
         self.device = device
         self.sos_idx = sos_idx
 
-        # Map BiLSTM hidden (2*H_enc) → decoder hidden size
         self.hidden_proj = nn.Linear(encoder.enc_hidden_dim*2, decoder.rnn.hidden_size)
         self.cell_proj   = nn.Linear(encoder.enc_hidden_dim*2, decoder.rnn.hidden_size)
     def init_decoder_hidden(self, enc_hidden, enc_cell):
@@ -343,15 +356,14 @@ class Seq2Seq(nn.Module):
         encoder_outputs, (enc_hidden, enc_cell) = self.encoder(src, src_lens)
 
     # 2. Combine forward & backward states from **last BiLSTM layer**
-    # BiLSTM hidden shape: [2*n_layers, batch, H_enc]
-        hidden_cat = torch.cat((enc_hidden[-2], enc_hidden[-1]), dim=1)  # [batch, 2*H_enc]
+    
+        hidden_cat = torch.cat((enc_hidden[-2], enc_hidden[-1]), dim=1)
         cell_cat   = torch.cat((enc_cell[-2], enc_cell[-1]), dim=1)
 
 
-        dec_hidden = torch.tanh(self.hidden_proj(hidden_cat)).unsqueeze(0)  # [1, batch, H_dec]
+        dec_hidden = torch.tanh(self.hidden_proj(hidden_cat)).unsqueeze(0)  
         dec_cell   = torch.tanh(self.cell_proj(cell_cat)).unsqueeze(0)
-        # Repeat hidden for all decoder layers
-        # Repeat hidden for all decoder layers
+        
         dec_hidden = dec_hidden.repeat(self.decoder.rnn.num_layers, 1, 1)
         dec_cell   = dec_cell.repeat(self.decoder.rnn.num_layers, 1, 1)
 
@@ -388,21 +400,20 @@ def build_model(cfg, src_stoi, trg_stoi, device):
         output_dim,
         cfg["emb_dim"],
         cfg["enc_hidden"],
-        cfg["enc_hidden"],  # decoder hidden
+        cfg["enc_hidden"], 
         n_layers=cfg["dec_layers"],
         dropout=cfg["dropout"],
         attention=attn
     )
 
-    # Pass sos_idx from trg_stoi
     model = Seq2Seq(enc, dec, device, sos_idx=trg_stoi['<SOS>']).to(device)
     return model
 
 
 
-  # -------------------------
-  # Metrics, training & evaluation
-  # -------------------------
+# =============================================================================
+# EVALUATION METRICS MODULE
+# =============================================================================
 def levenshtein(a: str, b: str) -> int:
       n, m = len(a), len(b)
       if n == 0: return m
@@ -435,10 +446,12 @@ def compute_bleu(reference: str, hypothesis: str) -> float:
                   ref_counts[t] -= 1
           return match / max(1, len(hyp))
 
-
+# =============================================================================
+# TRAINING MODULE
+# =============================================================================
 def train_epoch(model, dataloader, optimizer, criterion, device, clip=5.0, epoch=None, total_epochs=None,
                 teacher_forcing_start=0.9, teacher_forcing_end=0.3):
-    # Dynamic teacher forcing
+    
       if epoch is not None and total_epochs is not None:
         progress = epoch / total_epochs
         teacher_forcing_ratio = teacher_forcing_start + (teacher_forcing_end - teacher_forcing_start) * progress
@@ -458,29 +471,30 @@ def train_epoch(model, dataloader, optimizer, criterion, device, clip=5.0, epoch
         loss = criterion(outputs.view(-1, output_dim), trg.view(-1))
         loss.backward()
 
-        # Gradient clipping
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip)
         optimizer.step()
         total_loss += loss.item()
 
       return total_loss / len(dataloader)
 
+# =============================================================================
+# EVALUATION MODULE
+# =============================================================================
 def evaluate(model, dataloader, criterion, device, trg_itos):
-      model.eval()  # Set to evaluation mode
+      model.eval()  
       total_loss = 0.0
       total_cer = 0.0
       total_bleu = 0.0
       n_sent = 0
 
-      with torch.no_grad():  # This is crucial - no gradients during evaluation
+      with torch.no_grad():  
         for src, src_lens, trg, trg_lens in tqdm(dataloader, desc="Eval batches"):
             src, trg = src.to(device), trg.to(device)
             src_lens, trg_lens = src_lens.to(device), trg_lens.to(device)
 
-            # Forward pass without teacher forcing
             outputs = model(src, src_lens, trg=None, teacher_forcing_ratio=0.0, max_trg_len=trg.size(1))
 
-            # Calculate loss - but make sure we're not computing gradients
+            # Calculate loss 
             loss = criterion(outputs.view(-1, outputs.size(-1)), trg.view(-1))
             total_loss += loss.item()
 
@@ -514,7 +528,9 @@ def evaluate(model, dataloader, criterion, device, trg_itos):
       return {"loss": avg_loss, "perplexity": perp, "CER": avg_cer, "BLEU": avg_bleu}
 
 
-
+# ===============
+# beam search
+# ===============
 def translate_beam_search(model, src_text: str, src_stoi, trg_itos, trg_stoi, device,
                           max_len=200, beam_width=3, ngram_block=3):
     """
@@ -559,7 +575,7 @@ def translate_beam_search(model, src_text: str, src_stoi, trg_itos, trg_stoi, de
                     input_token, hidden, cell, encoder_outputs
                 )
 
-                log_probs = torch.log_softmax(output, dim=1).squeeze(0)  # [vocab_size]
+                log_probs = torch.log_softmax(output, dim=1).squeeze(0) 
                 topk_probs, topk_indices = torch.topk(log_probs, beam_width)
 
                 for i in range(beam_width):
@@ -572,7 +588,6 @@ def translate_beam_search(model, src_text: str, src_stoi, trg_itos, trg_stoi, de
 
                     new_seq = torch.cat([seq, next_token])
 
-                    # Optional: n-gram blocking
                     if ngram_block and has_repeat_ngram(new_seq, n=ngram_block):
                         continue
 
@@ -582,14 +597,12 @@ def translate_beam_search(model, src_text: str, src_stoi, trg_itos, trg_stoi, de
 
                     new_beams.append((new_seq, hidden_new, cell_new, next_score))
 
-            # Keep top beam_width sequences
             if not new_beams:
-                # If all beams pruned, keep previous beams
+              
                 new_beams = beams
 
             beams = sorted(new_beams, key=lambda x: x[3], reverse=True)[:beam_width]
 
-            # Stop if all beams end with EOS
             if all(seq[-1].item() == EOS_IDX for seq, _, _, _ in beams):
                 break
 
@@ -597,7 +610,7 @@ def translate_beam_search(model, src_text: str, src_stoi, trg_itos, trg_stoi, de
 
         # Decode tokens to chars
         chars = []
-        for idx in best_seq[1:]:  # skip SOS
+        for idx in best_seq[1:]: 
             ch = trg_itos.get(int(idx.item()), UNK_TOKEN)
             if ch == EOS_TOKEN:
                 break
@@ -609,9 +622,9 @@ def translate_beam_search(model, src_text: str, src_stoi, trg_itos, trg_stoi, de
 
 
 
-  # -------------------------
-  # Pipeline runner
-  # -------------------------
+# =============================================================================
+# MAIN PIPELINE MODULE
+# =============================================================================
 def run_pipeline(data_dir, experiment_configs, device_str="cuda"):
       device = torch.device(device_str if torch.cuda.is_available() else "cpu")
       print("Using device:", device)
@@ -630,34 +643,29 @@ def run_pipeline(data_dir, experiment_configs, device_str="cuda"):
         train_loader, val_loader, test_loader = build_dataloaders_char(df, src_stoi, trg_stoi, cfg, batch_size=cfg.get("batch_size",8))
         model = build_model(cfg, src_stoi, trg_stoi, device=device)
         model = model.to(device)
-        # In run_pipeline, modify optimizer:
-        # optimizer = optim.Adam(model.parameters(), lr=cfg["lr"], weight_decay=1e-5)
-        # In optimizer:
+        
         optimizer = optim.Adam(model.parameters(), lr=cfg["lr"], weight_decay=cfg.get("weight_decay", 0))
 
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
-        # Add learning rate scheduler (removed verbose parameter)
-        # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=2, factor=0.5)
-
+      
         pad_idx = trg_stoi[PAD_TOKEN]
         criterion = nn.CrossEntropyLoss(ignore_index=pad_idx)
 
         best_val = float('inf')
-        patience = cfg.get("patience", 3)  # Get patience from config or default to 3
+        patience = cfg.get("patience", 3) 
         patience_counter = 0
         best_state = None
 
         for epoch in range(cfg["epochs"]):
-            # Ensure model is in training mode
+           
             model.train()
             train_loss = train_epoch(model, train_loader, optimizer, criterion, device, clip=1.0, epoch=epoch,total_epochs=cfg["epochs"])
 
             scheduler.step()
-            # Ensure model is in eval mode for evaluation
+           
             model.eval()
             val_metrics = evaluate(model, val_loader, criterion, device, trg_itos)
 
-            # Update learning rate scheduler
             scheduler.step(val_metrics['loss'])
 
             print(f"Epoch {epoch+1}/{cfg['epochs']} TrainLoss: {train_loss:.4f} ValLoss: {val_metrics['loss']:.4f} BLEU: {val_metrics['BLEU']:.4f} CER: {val_metrics['CER']:.4f}")
@@ -673,7 +681,6 @@ def run_pipeline(data_dir, experiment_configs, device_str="cuda"):
                     print(f"Early stopping at epoch {epoch+1}")
                     break
 
-        # load best model
         if best_state is not None:
             model.load_state_dict({k:v.to(device) for k,v in best_state.items()})
 
@@ -686,17 +693,11 @@ def run_pipeline(data_dir, experiment_configs, device_str="cuda"):
 
 
 
-  # -------------------------
-  # Example experiments & run
-  # -------------------------
-  # Reduce batch size significantly
-  # Use this improved configuration
-# Try a slightly larger model with less regularization
-  # Minimal model for testing
-# Use a more conservative configuration
-  # Increase dropout and add more regularization
- # Use this configuration
+# =============================================================================
+# EXPERIMENT CONFIGURATIONS AND EXECUTION
+# =============================================================================
 # Example experiment configuration
+
 experiments = [
     {
         "emb_dim": 128,          # Embedding dimension
@@ -742,7 +743,7 @@ experiments = [
         "dec_layers": 4,
         "dropout": 0.1,
         "lr": 1e-3,
-        "batch_size": 32,  # Reduced batch size
+        "batch_size": 32,
         "epochs": 1,
         "patience": 5,
         "max_src_len": 100,
@@ -754,12 +755,28 @@ experiments = [
     }
 ]
 
+# =============================================================================
+# DEMONSTRATION AND VISUALIZATION MODULE
+# =============================================================================
+def demo_transliteration(model, src_stoi, trg_itos, device, examples):
+    """Demonstrate transliteration on example sentences"""
+    model.eval()
+    for urdu_text, expected_roman in examples:
+        print(f"Urdu: {urdu_text}")
+        print(f"Expected: {expected_roman}")
+        pred_beam = translate_beam_search(model, urdu_text, src_stoi, trg_itos, trg_stoi, device)
+        print(f"Predicted (beam): {pred_beam}")
+        print(f"CER: {cer(expected_roman, pred_beam):.4f}")
+        print("-" * 50)
 
-results = run_pipeline(DATA_DIR, experiments, device_str="cuda")
+# Example demonstration
+if results:
+    best_result = results[0]  # Get the first result
+    demo_examples = [
+        ("ہیلو دنیا", "hello duniya"),
+        ("کیا حال ہے", "kya haal hai"),
+        ("میں ٹھیک ہوں", "main theek hoon")
+    ]
+    demo_transliteration(best_result["model"], best_result["src_stoi"], best_result["trg_itos"], torch.device("cuda" if torch.cuda.is_available() else "cpu"), demo_examples)
 
-model = results[0]['model']
-src_stoi = results[0]['src_stoi']
-trg_stoi = results[0]['trg_stoi']
-trg_itos = results[0]['trg_itos']
-print(translate_beam_search(model, "آدمی", src_stoi, trg_itos, trg_stoi, device=torch.device("cuda"), beam_width=3))
 
