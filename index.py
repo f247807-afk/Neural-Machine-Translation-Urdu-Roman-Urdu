@@ -3,21 +3,29 @@
 # DATA EXTRACTION MODULE
 # =============================================================================
 import zipfile
-import os
 import requests
-
 from io import BytesIO
+import streamlit as st
+import os
 
-# Direct link to the zip file on GitHub (must be a .zip)
+st.title("Download and Extract GitHub Zip")
+
 zip_url = 'https://github.com/amir9ume/urdu_ghazals_rekhta/archive/refs/heads/master.zip'
 
-# Download the zip file into memory
+# Download the zip file
 response = requests.get(zip_url)
 zip_file = BytesIO(response.content)
 
+# Make sure extraction folder exists
+extract_dir = 'extracted_files'
+os.makedirs(extract_dir, exist_ok=True)
+
 # Extract the zip
 with zipfile.ZipFile(zip_file, 'r') as zip_ref:
-    zip_ref.extractall('extracted_files')  # local folde
+    zip_ref.extractall(extract_dir)
+
+st.success(f"Zip file extracted successfully to {extract_dir}")
+
 
 # =============================================================================
 # IMPORTS AND CONFIGURATION
