@@ -5,13 +5,18 @@
 import zipfile
 import os
 
-zip_file_path = 'https://github.com/amir9ume/urdu_ghazals_rekhta'
-extract_dir = '/'
+from io import BytesIO
 
-with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-    zip_ref.extractall(extract_dir)
+# Direct link to the zip file on GitHub (must be a .zip)
+zip_url = 'https://github.com/amir9ume/urdu_ghazals_rekhta/archive/refs/heads/master.zip'
 
-print(f"Extracted {zip_file_path} to {extract_dir}")
+# Download the zip file into memory
+response = requests.get(zip_url)
+zip_file = BytesIO(response.content)
+
+# Extract the zip
+with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+    zip_ref.extractall('extracted_files')  # local folde
 
 # =============================================================================
 # IMPORTS AND CONFIGURATION
