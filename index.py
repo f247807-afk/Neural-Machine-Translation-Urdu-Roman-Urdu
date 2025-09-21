@@ -5,7 +5,7 @@
 import zipfile
 import os
 
-zip_file_path = '/dataset.zip'
+zip_file_path = 'https://github.com/amir9ume/urdu_ghazals_rekhta'
 extract_dir = '/'
 
 with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
